@@ -1,7 +1,7 @@
 const fs = require('fs');
 const AWS = require('aws-sdk');
 
-const toDb = false;
+const toDb = true;
 
 const statesRegion = [
   { "state": "FL", "region": 1 },
@@ -59,6 +59,24 @@ const statesRegion = [
 
 ];
 
+const findByUrl = async (url) => {
+  const lambda = new AWS.Lambda({
+    region: 'us-east-1',
+  });
+  const Payload = JSON.stringify({ className: 'Site', where: { url } });
+  const params = {
+    FunctionName: 'adn-wl-data-db-dev-apiGetAllObjects',
+    InvocationType: 'RequestResponse',
+    Payload,
+  };
+  try {
+    const response = await lambda.invoke(params).promise();
+    return response;
+  } catch (err) {
+    console.error('Error finding', site.URL, err);
+  }
+};
+
 const saveToDb = async (site) => {
   const lambda = new AWS.Lambda({
     region: 'us-east-1',
@@ -70,7 +88,7 @@ const saveToDb = async (site) => {
     "state": site.State,
     "legacySiteId": site.LegacySiteID,
     "regionId": site.regionId,
-    "designerVersionId": 4
+    "designerVersionId": 2
   }
   const Payload = JSON.stringify({ className: 'Site', body: fhSite });
   const params = {
@@ -79,6 +97,10 @@ const saveToDb = async (site) => {
     Payload,
   };
   try {
+    const sitesInDbResponse = await findByUrl(site.URL);
+    if (sitesInDbResponse && sitesInDbResponse.Payload && JSON.parse(sitesInDbResponse.Payload).count) {
+      console.log('Site already in db', site.URL); return;
+    }
     const response = await lambda.invoke(params).promise();
     return response;
   } catch (err) {
