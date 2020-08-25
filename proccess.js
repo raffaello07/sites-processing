@@ -59,6 +59,8 @@ const statesRegion = [
 
 ];
 
+const alreadyInDB = [];
+
 const findByUrl = async (url) => {
   const lambda = new AWS.Lambda({
     region: 'us-east-1',
@@ -77,6 +79,45 @@ const findByUrl = async (url) => {
   }
 };
 
+const getUrls = (url) => {
+  const result = {
+    httpsurl: '',
+    httpswwurl: '',
+    httpwwurl: '',
+    httpurl: '',
+  };
+  let sufix = ''
+  const httpsid = url.indexOf('https');
+  const wwwid = url.indexOf('www.');
+  if (httpsid < 0 && wwwid < 0) {
+    sufix = 'http://';
+  } else if (httpsid < 0) {
+    sufix = 'http://www.';
+  } else if (wwwid < 0) {
+    sufix = 'http://';
+  } else {
+    sufix = 'https://www.';
+  }
+  result.httpurl = url.replace(sufix, 'http://');
+  result.httpsurl = url.replace(sufix, 'https://');
+  result.httpwwurl = url.replace(sufix, 'http://www.');
+  result.httpswwurl = url.replace(sufix, 'https://www.');
+
+  return result;
+};
+
+const findInDB = async (url) => {
+  const { httpsurl, httpswwurl, httpwwurl, httpurl } = getUrls(url);
+  const results = await Promise.all([
+    findByUrl(httpsurl),
+    findByUrl(httpswwurl),
+    findByUrl(httpwwurl),
+    findByUrl(httpurl),
+  ]);
+  const result = results.find(res => (res && res.Payload && JSON.parse(res.Payload).count));
+  return result ? JSON.parse(result.Payload) : null;
+};
+
 const saveToDb = async (site) => {
   const lambda = new AWS.Lambda({
     region: 'us-east-1',
@@ -88,7 +129,7 @@ const saveToDb = async (site) => {
     "state": site.State,
     "legacySiteId": site.LegacySiteID,
     "regionId": site.regionId,
-    "designerVersionId": 2
+    "designerVersionId": 1
   }
   const Payload = JSON.stringify({ className: 'Site', body: fhSite });
   const params = {
@@ -97,8 +138,10 @@ const saveToDb = async (site) => {
     Payload,
   };
   try {
-    const sitesInDbResponse = await findByUrl(site.URL);
-    if (sitesInDbResponse && sitesInDbResponse.Payload && JSON.parse(sitesInDbResponse.Payload).count) {
+    const sitesInDbResponse = await findInDB(site.URL);
+    if (sitesInDbResponse) {
+      alreadyInDB.push(fhSite);
+      site.URL = sitesInDbResponse.rows[0].url;
       console.log('Site already in db', site.URL); return;
     }
     const response = await lambda.invoke(params).promise();
@@ -148,9 +191,12 @@ const saveToDb = async (site) => {
       console.log(`[INFO] ${promises.length} site(s) inserted`);
       promises = [];
     }
-  } else {
-    let data = JSON.stringify(newSites);
-    fs.writeFileSync('proecessed-sites.json', data);
+    if (alreadyInDB.length) {
+      fs.writeFileSync('alreadyindb-sites2.json', JSON.stringify(alreadyInDB));
+    }
   }
+  let data = JSON.stringify(newSites);
+  fs.writeFileSync('proecessed-sites2.json', data);
+  fs.writeFileSync('sites-list2.json', JSON.stringify(newSites.map(item => item.URL)));
 
 })();
