@@ -2,6 +2,7 @@ const fs = require('fs');
 const AWS = require('aws-sdk');
 
 const toDb = true;
+const isObitImageMappingEnabled = flase;
 
 const statesRegion = [
   { "state": "FL", "region": 1 },
@@ -123,13 +124,14 @@ const saveToDb = async (site) => {
     region: 'us-east-1',
   });
   const fhSite = {
-    "name": site.Name,
+    "name": site.Name || site.Location,
     "url": site.URL,
     "city": site.City,
     "state": site.State,
-    "legacySiteId": site.LegacySiteID,
+    "legacySiteId": site.LegacySiteID || null,
     "regionId": site.regionId,
-    "designerVersionId": 1
+    "designerVersionId": 1,
+    isObitImageMappingEnabled,
   }
   const Payload = JSON.stringify({ className: 'Site', body: fhSite });
   const params = {
@@ -142,6 +144,17 @@ const saveToDb = async (site) => {
     if (sitesInDbResponse) {
       alreadyInDB.push(fhSite);
       site.URL = sitesInDbResponse.rows[0].url;
+      if (isObitImageMappingEnabled) {
+        await lambda.invoke({
+          FunctionName: 'adn-wl-data-db-dev-apiUpdateObject',
+          InvocationType: 'RequestResponse',
+          Payload: JSON.stringify({
+            className: 'Site',
+            body: { isObitImageMappingEnabled },
+            id: sitesInDbResponse.rows[0].id
+          }),
+        }).promise();
+      }
       console.log('Site already in db', site.URL); return;
     }
     const response = await lambda.invoke(params).promise();
@@ -192,11 +205,11 @@ const saveToDb = async (site) => {
       promises = [];
     }
     if (alreadyInDB.length) {
-      fs.writeFileSync('alreadyindb-sites2.json', JSON.stringify(alreadyInDB));
+      fs.writeFileSync('alreadyindb-sites.json', JSON.stringify(alreadyInDB));
     }
   }
   let data = JSON.stringify(newSites);
-  fs.writeFileSync('proecessed-sites2.json', data);
-  fs.writeFileSync('sites-list2.json', JSON.stringify(newSites.map(item => item.URL)));
+  fs.writeFileSync('proecessed-sites.json', data);
+  fs.writeFileSync('sites-list.json', JSON.stringify(newSites.map(item => item.URL)));
 
 })();
