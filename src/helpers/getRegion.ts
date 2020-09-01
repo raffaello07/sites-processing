@@ -1,4 +1,6 @@
-import { statesRegion } from 'src/constants';
+import { statesRegion } from '../constants';
 
-export const getRegion = (state: string): number =>
-  statesRegion.find((reg) => reg.state === state).region || 1;
+export const getRegion = (state: string): number => {
+  const regFound = statesRegion.find((reg) => reg.state === state.trim());
+  return regFound ? regFound.region : 1;
+};
