@@ -84,7 +84,6 @@ export const saveRecord = async ({
   body: any;
 }): Promise<any | null> => {
   try {
-    console.log('[INFO] saving..', JSON.stringify(body, null, 2));
     const recordInDb = await findOneBy({ className, where });
     if (recordInDb) {
       return recordInDb;
@@ -116,6 +115,10 @@ export const migrateRecord = async <T, U>({
   }
   const mappedRecord = mapRow(row);
   const instertedRecord = await insertRow(mappedRecord);
+  console.log(
+    '[INFO] Row Inserted/Updated',
+    JSON.stringify(instertedRecord, null, 2),
+  );
   return instertedRecord;
 };
 
@@ -146,23 +149,39 @@ export const getDataFromCSV = async <T, U>({
   csvPath,
   migrateFunctions: { insertRow, mapRow, validateRow },
 }: MigrateCSVPayload<T, U>): Promise<U[]> => {
-  const rawData: U[] = [];
+  const rawData: T[] = [];
   await new Promise((resolve) => {
     fs.createReadStream(csvPath)
       .pipe(csv())
       .on('data', async (row: T) => {
-        rawData.push(
-          await migrateRecord({
-            row,
-            migrateFunctions: { validateRow, mapRow, insertRow },
-          }),
-        );
+        rawData.push(row);
       })
       .on('end', () => {
         resolve();
       });
   });
-  return rawData;
+  let savedData: U[] = [];
+  let promises: Promise<U>[] = [];
+  // eslint-disable-next-line no-restricted-syntax
+  for (const row of rawData) {
+    promises.push(
+      migrateRecord({
+        row,
+        migrateFunctions: { validateRow, mapRow, insertRow },
+      }),
+    );
+    if (promises.length >= 30) {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await Promise.all(promises);
+      savedData = [...savedData, ...result.filter((item) => !!item)];
+      promises = [];
+    }
+  }
+  if (promises.length) {
+    const result = await Promise.all(promises);
+    savedData = [...savedData, ...result.filter((item) => !!item)];
+  }
+  return savedData;
 };
 // LegacyPro	FHID	Funeral Home Name	Address	Address2	City	State	State Abbreviation	Postal Code	Country	URL	Domain	WL id	WL designer version	WL region	WL site	WL city	WL State
 const validateFHandSite = (row: RawSiteAndFH): boolean =>
