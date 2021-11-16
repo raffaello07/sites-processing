@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@legacydevteam/adn_wl_common": "1.1.1",
-    "aws-sdk": "2.711.0",
+    "aws-sdk": "2.814.0",
     "csv-parser": "^2.3.3"
   },
   "devDependencies": {
